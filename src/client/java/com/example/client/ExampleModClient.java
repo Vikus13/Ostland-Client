@@ -8,13 +8,13 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -38,7 +38,7 @@ public class ExampleModClient implements ClientModInitializer {
     public void onInitializeClient() {
         load();
 
-        HudRenderCallback.EVENT.register((ctx, tickCounter) -> render(ctx));
+        HudRenderCallback.EVENT.register((graphics, tickCounter) -> render(graphics));
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             lastTimePacket = 0;
@@ -55,11 +55,11 @@ public class ExampleModClient implements ClientModInitializer {
                                                 if (s.length() != 6) throw new NumberFormatException();
                                                 colorRgb = Integer.parseInt(s, 16);
                                                 save();
-                                                c.getSource().sendFeedback(Text.literal(
+                                                c.getSource().sendFeedback(Component.literal(
                                                         "Ostland Client color: #" + s.toUpperCase(Locale.ROOT)));
                                                 return 1;
                                             } catch (NumberFormatException ex) {
-                                                c.getSource().sendError(Text.literal(
+                                                c.getSource().sendError(Component.literal(
                                                         "Use 6 hex digits, for example: /ostland color ff5555"));
                                                 return 0;
                                             }
@@ -69,7 +69,7 @@ public class ExampleModClient implements ClientModInitializer {
                                         .executes(c -> {
                                             opacity = IntegerArgumentType.getInteger(c, "percent");
                                             save();
-                                            c.getSource().sendFeedback(Text.literal(
+                                            c.getSource().sendFeedback(Component.literal(
                                                     "Ostland Client opacity: " + opacity + "%"));
                                             return 1;
                                         })))));
@@ -91,25 +91,25 @@ public class ExampleModClient implements ClientModInitializer {
     }
 
     // ---------- rendering ----------
-    private static void render(DrawContext ctx) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || mc.options.hudHidden) return;
-        TextRenderer tr = mc.textRenderer;
+    private static void render(GuiGraphics g) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.options.hideGui) return;
+        Font font = mc.font;
 
         int ping = -1;
-        ClientPlayNetworkHandler nh = mc.getNetworkHandler();
-        if (nh != null) {
-            PlayerListEntry entry = nh.getPlayerListEntry(mc.player.getUuid());
-            if (entry != null) ping = entry.getLatency();
+        ClientPacketListener conn = mc.getConnection();
+        if (conn != null) {
+            PlayerInfo info = conn.getPlayerInfo(mc.player.getUUID());
+            if (info != null) ping = info.getLatency();
         }
         double t = tps;
 
-        Text[] parts = {
-                Text.literal("Ostland Client").formatted(Formatting.BOLD),
-                Text.literal(mc.getSession().getUsername()),
-                Text.literal(mc.getCurrentFps() + " FPS"),
-                Text.literal(ping < 0 ? "-- ms" : ping + " ms"),
-                Text.literal(t < 0 ? "-- TPS" : String.format(Locale.ROOT, "%.1f TPS", t))
+        Component[] parts = {
+                Component.literal("Ostland Client").withStyle(ChatFormatting.BOLD),
+                Component.literal(mc.player.getName().getString()),
+                Component.literal(mc.getFps() + " FPS"),
+                Component.literal(ping < 0 ? "-- ms" : ping + " ms"),
+                Component.literal(t < 0 ? "-- TPS" : String.format(Locale.ROOT, "%.1f TPS", t))
         };
 
         final int pad = 10;
@@ -118,32 +118,32 @@ public class ExampleModClient implements ClientModInitializer {
 
         int total = pad * 2;
         for (int i = 0; i < parts.length; i++) {
-            total += tr.getWidth(parts[i]);
+            total += font.width(parts[i]);
             if (i < parts.length - 1) total += gap * 2 + 1;
         }
 
-        int x = (mc.getWindow().getScaledWidth() - total) / 2;
+        int x = (mc.getWindow().getGuiScaledWidth() - total) / 2;
         int y = 4;
 
         int alpha = Math.round(opacity * 255f / 100f);
         int argb = (alpha << 24) | (colorRgb & 0xFFFFFF);
-        fillRounded(ctx, x, y, total, h, h / 2, argb);
+        fillRounded(g, x, y, total, h, h / 2, argb);
 
         int cx = x + pad;
         int textY = y + (h - 8) / 2;
         for (int i = 0; i < parts.length; i++) {
-            ctx.drawText(tr, parts[i], cx, textY, 0xFFFFFFFF, true);
-            cx += tr.getWidth(parts[i]);
+            g.drawString(font, parts[i], cx, textY, 0xFFFFFFFF, true);
+            cx += font.width(parts[i]);
             if (i < parts.length - 1) {
                 cx += gap;
-                ctx.fill(cx, y + 5, cx + 1, y + h - 5, 0x55FFFFFF);
+                g.fill(cx, y + 5, cx + 1, y + h - 5, 0x55FFFFFF);
                 cx += 1 + gap;
             }
         }
     }
 
     /** Rectangle with rounded corners, drawn row by row. */
-    private static void fillRounded(DrawContext ctx, int x, int y, int w, int h, int radius, int argb) {
+    private static void fillRounded(GuiGraphics g, int x, int y, int w, int h, int radius, int argb) {
         radius = Math.min(radius, h / 2);
         for (int i = 0; i < h; i++) {
             int inset = 0;
@@ -157,7 +157,7 @@ public class ExampleModClient implements ClientModInitializer {
                 double dd = d - 0.5;
                 inset = (int) Math.round(radius - Math.sqrt(radius * radius - dd * dd));
             }
-            ctx.fill(x + inset, y + i, x + w - inset, y + i + 1, argb);
+            g.fill(x + inset, y + i, x + w - inset, y + i + 1, argb);
         }
     }
 
