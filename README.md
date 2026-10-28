@@ -105,3 +105,18 @@ CC0-1.0
 ## Лицензия
 
 CC0-1.0
+
+
+---
+
+<div align="center">
+
+Made with ❤️ by &nbsp;|&nbsp; Сделано с ❤️
+
+<a href="https://github.com/Vikus13">
+  <img src="https://img.shields.io/badge/Author-Vikusya00-ff69b4?style=for-the-badge" alt="Author: Vikusya00">
+</a>
+
+<sub>Ostland Client</sub>
+
+</div>
